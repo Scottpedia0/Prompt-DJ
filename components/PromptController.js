@@ -3,20 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { css, html, LitElement } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
-import './WeightKnob';
-import type { WeightKnob } from './WeightKnob';
-
-import type { MidiDispatcher } from '../utils/MidiDispatcher';
-import type { Prompt, ControlChange } from '../types';
+import './WeightKnob.js';
 
 /** A single prompt input associated with a MIDI CC. */
-@customElement('prompt-controller')
-// FIX: The class should extend LitElement to be a custom element.
 export class PromptController extends LitElement {
-  static styles = css`
+  static get properties() {
+    return {
+      promptId: { type: String },
+      text: { type: String },
+      weight: { type: Number },
+      color: { type: String },
+      filtered: { type: Boolean, reflect: true },
+      cc: { type: Number },
+      channel: { type: Number },
+      learnMode: { type: Boolean },
+      showCC: { type: Boolean },
+      midiDispatcher: { type: Object },
+      audioLevel: { type: Number },
+    };
+  }
+
+  static get styles() {
+    return css`
     .prompt {
       width: 100%;
       display: flex;
@@ -88,34 +98,35 @@ export class PromptController extends LitElement {
       }
     }
   `;
+  }
 
-  @property({ type: String }) promptId = '';
-  @property({ type: String }) text = '';
-  @property({ type: Number }) weight = 0;
-  @property({ type: String }) color = '';
-  @property({ type: Boolean, reflect: true }) filtered = false;
+  constructor() {
+    super();
+    this.promptId = '';
+    this.text = '';
+    this.weight = 0;
+    this.color = '';
+    this.filtered = false;
+    this.cc = 0;
+    this.channel = 0;
+    this.learnMode = false;
+    this.showCC = false;
+    this.midiDispatcher = null;
+    this.audioLevel = 0;
+  }
 
-  @property({ type: Number }) cc = 0;
-  @property({ type: Number }) channel = 0; // Not currently used
+  get weightInput() {
+    return this.renderRoot.querySelector('weight-knob');
+  }
 
-  @property({ type: Boolean }) learnMode = false;
-  @property({ type: Boolean }) showCC = false;
-
-  @query('weight-knob') private weightInput!: WeightKnob;
-  @query('#text') private textInput!: HTMLInputElement;
-
-  @property({ type: Object })
-  midiDispatcher: MidiDispatcher | null = null;
-
-  @property({ type: Number }) audioLevel = 0;
-
-  private lastValidText!: string;
+  get textInput() {
+    return this.renderRoot.querySelector('#text');
+  }
 
   connectedCallback() {
     super.connectedCallback();
-    this.midiDispatcher?.addEventListener('cc-message', (e: Event) => {
-      const customEvent = e as CustomEvent<ControlChange>;
-      const { channel, cc, value } = customEvent.detail;
+    this.midiDispatcher?.addEventListener('cc-message', (e) => {
+      const { channel, cc, value } = e.detail;
       if (this.learnMode) {
         this.cc = cc;
         this.channel = channel;
@@ -130,15 +141,12 @@ export class PromptController extends LitElement {
 
   firstUpdated() {
     // contenteditable is applied to textInput so we can "shrink-wrap" to text width
-    // It's set here and not render() because Lit doesn't believe it's a valid attribute.
     this.textInput.setAttribute('contenteditable', 'plaintext-only');
-
-    // contenteditable will do weird things if this is part of the template.
     this.textInput.textContent = this.text;
     this.lastValidText = this.text;
   }
 
-  update(changedProperties: Map<string, unknown>) {
+  update(changedProperties) {
     if (changedProperties.has('showCC') && !this.showCC) {
       this.learnMode = false;
     }
@@ -148,9 +156,9 @@ export class PromptController extends LitElement {
     super.update(changedProperties);
   }
 
-  private dispatchPromptChange() {
-    (this as HTMLElement).dispatchEvent(
-      new CustomEvent<Prompt>('prompt-changed', {
+  dispatchPromptChange() {
+    this.dispatchEvent(
+      new CustomEvent('prompt-changed', {
         detail: {
           promptId: this.promptId,
           text: this.text,
@@ -162,7 +170,7 @@ export class PromptController extends LitElement {
     );
   }
 
-  private onKeyDown(e: KeyboardEvent) {
+  onKeyDown(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
       this.textInput.blur();
@@ -174,12 +182,12 @@ export class PromptController extends LitElement {
     }
   }
 
-  private resetText() {
+  resetText() {
     this.text = this.lastValidText;
     this.textInput.textContent = this.lastValidText;
   }
 
-  private async updateText() {
+  async updateText() {
     const newText = this.textInput.textContent?.trim();
     if (!newText) {
       this.resetText();
@@ -188,12 +196,10 @@ export class PromptController extends LitElement {
       this.lastValidText = newText;
     }
     this.dispatchPromptChange();
-    // Show the prompt from the beginning if it's cropped
     this.textInput.scrollLeft = 0;
   }
 
-  private onFocus() {
-    // .select() for contenteditable doesn't work.
+  onFocus() {
     const selection = window.getSelection();
     if (!selection) return;
     const range = document.createRange();
@@ -202,12 +208,12 @@ export class PromptController extends LitElement {
     selection.addRange(range);
   }
 
-  private updateWeight() {
+  updateWeight() {
     this.weight = this.weightInput.value;
     this.dispatchPromptChange();
   }
 
-  private toggleLearnMode() {
+  toggleLearnMode() {
     this.learnMode = !this.learnMode;
   }
 
@@ -237,8 +243,4 @@ export class PromptController extends LitElement {
   }
 }
 
-declare global {
-  interface HTMLElementTagNameMap {
-    'prompt-controller': PromptController;
-  }
-}
+customElements.define('prompt-controller', PromptController);

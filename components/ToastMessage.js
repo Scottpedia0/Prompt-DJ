@@ -3,13 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { css, html, LitElement } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
-@customElement('toast-message')
-// FIX: The class should extend LitElement to be a custom element.
 export class ToastMessage extends LitElement {
-  static styles = css`
+  static get properties() {
+    return {
+      message: { type: String },
+      showing: { type: Boolean }
+    };
+  }
+
+  static get styles() {
+    return css`
     .toast {
       line-height: 1.6;
       position: fixed;
@@ -46,11 +51,15 @@ export class ToastMessage extends LitElement {
       text-decoration: underline;
     }
   `;
+  }
 
-  @property({ type: String }) message = '';
-  @property({ type: Boolean }) showing = false;
+  constructor() {
+    super();
+    this.message = '';
+    this.showing = false;
+  }
 
-  private renderMessageWithLinks() {
+  renderMessageWithLinks() {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = this.message.split( urlRegex );
     return parts.map( ( part, i ) => {
@@ -66,7 +75,7 @@ export class ToastMessage extends LitElement {
     </div>`;
   }
 
-  show(message: string) {
+  show(message) {
     this.showing = true;
     this.message = message;
   }
@@ -77,8 +86,4 @@ export class ToastMessage extends LitElement {
 
 }
 
-declare global {
-  interface HTMLElementTagNameMap {
-    'toast-message': ToastMessage
-  }
-}
+customElements.define('toast-message', ToastMessage);

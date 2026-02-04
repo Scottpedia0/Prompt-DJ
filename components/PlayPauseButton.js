@@ -3,16 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { svg, css, html, LitElement } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import type { PlaybackState } from '../types';
 
-@customElement('play-pause-button')
-// FIX: The class should extend LitElement to be a custom element.
 export class PlayPauseButton extends LitElement {
 
-  @property({ type: String }) playbackState: PlaybackState = 'stopped';
+  static get properties() {
+    return {
+      playbackState: { type: String }
+    };
+  }
 
-  static styles = css`
+  constructor() {
+    super();
+    this.playbackState = 'stopped';
+  }
+
+  static get styles() {
+    return css`
     :host {
       position: relative;
       display: flex;
@@ -50,8 +56,9 @@ export class PlayPauseButton extends LitElement {
       to { transform: rotate(359deg); }
     }
   `;
+  }
 
-  private renderSvg() {
+  renderSvg() {
     return html` <svg
       width="140"
       height="140"
@@ -152,23 +159,23 @@ export class PlayPauseButton extends LitElement {
     </svg>`;
   }
 
-  private renderPause() {
+  renderPause() {
     return svg`<path
       d="M75.0037 69V39H83.7537V69H75.0037ZM56.2537 69V39H65.0037V69H56.2537Z"
       fill="#FEFEFE"
     />`;
   }
 
-  private renderPlay() {
+  renderPlay() {
     return svg`<path d="M60 71.5V36.5L87.5 54L60 71.5Z" fill="#FEFEFE" />`;
   }
 
-  private renderLoading() {
+  renderLoading() {
     return svg`<path shape-rendering="crispEdges" class="loader" d="M70,74.2L70,74.2c-10.7,0-19.5-8.7-19.5-19.5l0,0c0-10.7,8.7-19.5,19.5-19.5
             l0,0c10.7,0,19.5,8.7,19.5,19.5l0,0"/>`;
   }
 
-  private renderIcon() {
+  renderIcon() {
     if (this.playbackState === 'playing') {
       return this.renderPause();
     } else if (this.playbackState === 'loading') {
@@ -183,8 +190,4 @@ export class PlayPauseButton extends LitElement {
   }
 }
 
-declare global {
-  interface HTMLElementTagNameMap {
-    'play-pause-button': PlayPauseButton
-  }
-}
+customElements.define('play-pause-button', PlayPauseButton);

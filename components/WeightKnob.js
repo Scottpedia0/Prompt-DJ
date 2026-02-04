@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { css, html, LitElement } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
 /** Maps prompt weight to halo size. */
@@ -14,10 +13,17 @@ const MAX_HALO_SCALE = 2;
 const HALO_LEVEL_MODIFIER = 1;
 
 /** A knob for adjusting and visualizing prompt weight. */
-@customElement('weight-knob')
-// FIX: The class should extend LitElement to be a custom element.
 export class WeightKnob extends LitElement {
-  static styles = css`
+  static get properties() {
+    return {
+      value: { type: Number },
+      color: { type: String },
+      audioLevel: { type: Number }
+    };
+  }
+
+  static get styles() {
+    return css`
     :host {
       cursor: grab;
       position: relative;
@@ -46,22 +52,21 @@ export class WeightKnob extends LitElement {
       will-change: transform;
     }
   `;
-
-  @property({ type: Number }) value = 0;
-  @property({ type: String }) color = '#000';
-  @property({ type: Number }) audioLevel = 0;
-
-  private dragStartPos = 0;
-  private dragStartValue = 0;
+  }
 
   constructor() {
     super();
+    this.value = 0;
+    this.color = '#000';
+    this.audioLevel = 0;
+    this.dragStartPos = 0;
+    this.dragStartValue = 0;
     this.handlePointerDown = this.handlePointerDown.bind(this);
     this.handlePointerMove = this.handlePointerMove.bind(this);
     this.handlePointerUp = this.handlePointerUp.bind(this);
   }
 
-  private handlePointerDown(e: PointerEvent) {
+  handlePointerDown(e) {
     e.preventDefault();
     this.dragStartPos = e.clientY;
     this.dragStartValue = this.value;
@@ -70,33 +75,27 @@ export class WeightKnob extends LitElement {
     window.addEventListener('pointerup', this.handlePointerUp);
   }
 
-  private handlePointerMove(e: PointerEvent) {
+  handlePointerMove(e) {
     const delta = this.dragStartPos - e.clientY;
     this.value = this.dragStartValue + delta * 0.01;
     this.value = Math.max(0, Math.min(2, this.value));
-    (this as HTMLElement).dispatchEvent(new CustomEvent<number>('input', { detail: this.value }));
+    this.dispatchEvent(new CustomEvent('input', { detail: this.value }));
   }
 
-  private handlePointerUp() {
+  handlePointerUp() {
     window.removeEventListener('pointermove', this.handlePointerMove);
     window.removeEventListener('pointerup', this.handlePointerUp);
     document.body.classList.remove('dragging');
   }
 
-  private handleWheel(e: WheelEvent) {
+  handleWheel(e) {
     const delta = e.deltaY;
     this.value = this.value + delta * -0.0025;
     this.value = Math.max(0, Math.min(2, this.value));
-    (this as HTMLElement).dispatchEvent(new CustomEvent<number>('input', { detail: this.value }));
+    this.dispatchEvent(new CustomEvent('input', { detail: this.value }));
   }
 
-  private describeArc(
-    centerX: number,
-    centerY: number,
-    startAngle: number,
-    endAngle: number,
-    radius: number,
-  ): string {
+  describeArc(centerX, centerY, startAngle, endAngle, radius) {
     const startX = centerX + radius * Math.cos(startAngle);
     const startY = centerY + radius * Math.sin(startAngle);
     const endX = centerX + radius * Math.cos(endAngle);
@@ -157,7 +156,7 @@ export class WeightKnob extends LitElement {
     `;
   }
   
-  private renderStaticSvg() { 
+  renderStaticSvg() { 
     return html`<svg viewBox="0 0 80 80">
         <ellipse
           opacity="0.4"
@@ -291,8 +290,4 @@ export class WeightKnob extends LitElement {
 
 }
 
-declare global {
-  interface HTMLElementTagNameMap {
-    'weight-knob': WeightKnob;
-  }
-}
+customElements.define('weight-knob', WeightKnob);

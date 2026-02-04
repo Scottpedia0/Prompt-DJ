@@ -3,21 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { css, html, LitElement } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
-import { throttle } from '../utils/throttle';
+import { throttle } from '../utils/throttle.js';
 
-import './PromptController';
-import './PlayPauseButton';
-import type { PlaybackState, Prompt } from '../types';
-import { MidiDispatcher } from '../utils/MidiDispatcher';
+import './PromptController.js';
+import './PlayPauseButton.js';
+import { MidiDispatcher } from '../utils/MidiDispatcher.js';
 
 const DEFAULT_SCENE_NAME = 'Default';
 
-type Scene = [string, Prompt][];
-
-const DEFAULT_SCENES: Record<string, Scene> = {
+const DEFAULT_SCENES = {
   [DEFAULT_SCENE_NAME]: [
     ['prompt-0', { promptId: 'prompt-0', text: 'irish fiddle with banging toms', weight: 1, cc: 0, color: '#3dffab' }],
     ['prompt-1', { promptId: 'prompt-1', text: 'Tribal drum circle', weight: 1, cc: 1, color: '#ffdd28' }],
@@ -103,10 +99,27 @@ const DEFAULT_SCENES: Record<string, Scene> = {
 const LOCAL_STORAGE_KEY = 'promptDjMidiScenes';
 
 /** The grid of prompt inputs. */
-@customElement('prompt-dj-midi')
-// FIX: The class should extend LitElement to be a custom element.
 export class PromptDjMidi extends LitElement {
-  static styles = css`
+  static get properties() {
+    return {
+      prompts: { state: true },
+      showMidi: { type: Boolean },
+      playbackState: { type: String },
+      isRecording: { type: Boolean },
+      isProcessingRecording: { type: Boolean },
+      audioLevel: { state: true },
+      midiInputIds: { state: true },
+      activeMidiInputId: { state: true },
+      buildUpPrompt: { state: true },
+      breakdownPrompt: { state: true },
+      scenes: { state: true },
+      activeSceneName: { state: true },
+      filteredPrompts: { type: Object }
+    };
+  }
+
+  static get styles() {
+    return css`
     :host {
       height: 100%;
       width: 100%;
@@ -241,34 +254,54 @@ export class PromptDjMidi extends LitElement {
       cursor: pointer;
     }
   `;
-
-  @state() private prompts = new Map<string, Prompt>();
-  private midiDispatcher: MidiDispatcher;
-
-  @property({ type: Boolean }) private showMidi = false;
-  @property({ type: String }) public playbackState: PlaybackState = 'stopped';
-  @property({ type: Boolean }) public isRecording = false;
-  @property({ type: Boolean }) public isProcessingRecording = false;
-  @state() public audioLevel = 0;
-  @state() private midiInputIds: string[] = [];
-  @state() private activeMidiInputId: string | null = null;
-  @state() private buildUpPrompt!: Prompt;
-  @state() private breakdownPrompt!: Prompt;
-  
-  @state() private scenes: Record<string, Scene> = {};
-  @state() private activeSceneName = '';
-
-  @property({ type: Object })
-  private filteredPrompts = new Set<string>();
+  }
 
   constructor() {
     super();
+    this.prompts = new Map();
+    this.showMidi = false;
+    this.playbackState = 'stopped';
+    this.isRecording = false;
+    this.isProcessingRecording = false;
+    this.audioLevel = 0;
+    this.midiInputIds = [];
+    this.activeMidiInputId = null;
+    this.scenes = {};
+    this.activeSceneName = '';
+    this.filteredPrompts = new Set();
+    
+    // Initialize throttle function
+    this.makeBackground = throttle(
+      () => {
+        const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
+        const MAX_WEIGHT = 0.5;
+        const MAX_ALPHA = 0.6;
+        const bg = [];
+
+        [...this.allPrompts.values()].forEach((p, i) => {
+          const alphaPct = clamp01(p.weight / MAX_WEIGHT) * MAX_ALPHA;
+          const alpha = Math.round(alphaPct * 0xff)
+            .toString(16)
+            .padStart(2, '0');
+
+          const stop = p.weight / 2;
+          const x = (i % 4) / 3;
+          const y = Math.floor(i / 4) / 3;
+          const s = `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${p.color}${alpha} 0px, ${p.color}00 ${stop * 100}%)`;
+          bg.push(s);
+        });
+
+        return bg.join(', ');
+      },
+      30
+    );
+
     this.midiDispatcher = new MidiDispatcher();
     this.loadScenesFromStorage();
     this.loadScene(this.activeSceneName);
   }
 
-  private loadScenesFromStorage() {
+  loadScenesFromStorage() {
     const storedScenes = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (storedScenes) {
       this.scenes = JSON.parse(storedScenes);
@@ -279,16 +312,16 @@ export class PromptDjMidi extends LitElement {
     this.activeSceneName = Object.keys(this.scenes)[0] || DEFAULT_SCENE_NAME;
   }
 
-  private saveScenesToStorage() {
+  saveScenesToStorage() {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.scenes));
   }
   
-  private loadScene(name: string) {
+  loadScene(name) {
     const sceneData = this.scenes[name];
     if (!sceneData) return;
 
     const allPromptsMap = new Map(sceneData);
-    const newGridPrompts = new Map<string, Prompt>();
+    const newGridPrompts = new Map();
     
     allPromptsMap.forEach((prompt, id) => {
       if (id === 'build-up') {
@@ -302,10 +335,10 @@ export class PromptDjMidi extends LitElement {
 
     this.prompts = newGridPrompts;
     this.activeSceneName = name;
-    (this as HTMLElement).dispatchEvent(new CustomEvent('prompts-changed', { detail: allPromptsMap }));
+    this.dispatchEvent(new CustomEvent('prompts-changed', { detail: allPromptsMap }));
   }
 
-  private saveScene() {
+  saveScene() {
     const name = prompt('Enter scene name:', this.activeSceneName);
     if (!name) return;
 
@@ -316,10 +349,10 @@ export class PromptDjMidi extends LitElement {
     this.scenes[name] = Array.from(this.allPrompts.entries());
     this.activeSceneName = name;
     this.saveScenesToStorage();
-    (this as any).requestUpdate(); // To update the select dropdown
+    this.requestUpdate(); 
   }
   
-  private deleteScene() {
+  deleteScene() {
     if (!this.scenes[this.activeSceneName]) return;
     if (!confirm(`Are you sure you want to delete the scene "${this.activeSceneName}"?`)) {
       return;
@@ -332,19 +365,19 @@ export class PromptDjMidi extends LitElement {
     this.loadScene(nextSceneName);
   }
 
-  private handleSceneChange(e: Event) {
-    const newSceneName = (e.target as HTMLSelectElement).value;
+  handleSceneChange(e) {
+    const newSceneName = e.target.value;
     this.loadScene(newSceneName);
   }
 
-  get allPrompts(): Map<string, Prompt> {
+  get allPrompts() {
     const all = new Map(this.prompts);
     if (this.buildUpPrompt) all.set(this.buildUpPrompt.promptId, this.buildUpPrompt);
     if (this.breakdownPrompt) all.set(this.breakdownPrompt.promptId, this.breakdownPrompt);
     return all;
   }
 
-  private handlePromptChanged(e: CustomEvent<Prompt>) {
+  handlePromptChanged(e) {
     const detail = e.detail;
     const { promptId } = detail;
     const prompt = this.prompts.get(promptId);
@@ -355,88 +388,59 @@ export class PromptDjMidi extends LitElement {
     newPrompts.set(promptId, detail);
     this.prompts = newPrompts;
 
-    (this as HTMLElement).dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
+    this.dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
   }
 
-  private handlePerformancePromptChanged(e: CustomEvent<Prompt>) {
+  handlePerformancePromptChanged(e) {
     const detail = e.detail;
     if (detail.promptId === 'build-up') {
       this.buildUpPrompt = detail;
     } else if (detail.promptId === 'breakdown') {
       this.breakdownPrompt = detail;
     }
-    (this as HTMLElement).dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
+    this.dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
   }
 
-  /** Generates radial gradients for each prompt based on weight and color. */
-  private readonly makeBackground = throttle(
-    () => {
-      const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
-
-      const MAX_WEIGHT = 0.5;
-      const MAX_ALPHA = 0.6;
-
-      const bg: string[] = [];
-
-      [...this.allPrompts.values()].forEach((p, i) => {
-        const alphaPct = clamp01(p.weight / MAX_WEIGHT) * MAX_ALPHA;
-        const alpha = Math.round(alphaPct * 0xff)
-          .toString(16)
-          .padStart(2, '0');
-
-        const stop = p.weight / 2;
-        const x = (i % 4) / 3;
-        const y = Math.floor(i / 4) / 3;
-        const s = `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${p.color}${alpha} 0px, ${p.color}00 ${stop * 100}%)`;
-
-        bg.push(s);
-      });
-
-      return bg.join(', ');
-    },
-    30, // don't re-render more than once every XXms
-  );
-
-  private toggleShowMidi() {
+  toggleShowMidi() {
     return this.setShowMidi(!this.showMidi);
   }
 
-  public async setShowMidi(show: boolean) {
+  async setShowMidi(show) {
     this.showMidi = show;
     if (!this.showMidi) return;
     try {
       const inputIds = await this.midiDispatcher.getMidiAccess();
       this.midiInputIds = inputIds;
       this.activeMidiInputId = this.midiDispatcher.activeMidiInputId;
-    } catch (e: any) {
-      (this as HTMLElement).dispatchEvent(new CustomEvent('error', {detail: e.message}));
+    } catch (e) {
+      this.dispatchEvent(new CustomEvent('error', {detail: e.message}));
     }
   }
 
-  private handleMidiInputChange(event: Event) {
-    const selectElement = event.target as HTMLSelectElement;
+  handleMidiInputChange(event) {
+    const selectElement = event.target;
     const newMidiId = selectElement.value;
     this.activeMidiInputId = newMidiId;
     this.midiDispatcher.activeMidiInputId = newMidiId;
   }
 
-  private playPause() {
-    (this as HTMLElement).dispatchEvent(new CustomEvent('play-pause'));
+  playPause() {
+    this.dispatchEvent(new CustomEvent('play-pause'));
   }
 
-  public addFilteredPrompt(prompt: string) {
+  addFilteredPrompt(prompt) {
     this.filteredPrompts = new Set([...this.filteredPrompts, prompt]);
   }
 
-  private showInfo() {
-    (this as HTMLElement).dispatchEvent(new CustomEvent('show-info'));
+  showInfo() {
+    this.dispatchEvent(new CustomEvent('show-info'));
   }
 
-  private resetPrompts() {
+  resetPrompts() {
       this.loadScene(DEFAULT_SCENE_NAME);
   }
 
-  private clearAllPrompts() {
+  clearAllPrompts() {
       const newPrompts = new Map(this.prompts);
       for (const prompt of newPrompts.values()) {
           prompt.text = '';
@@ -445,11 +449,11 @@ export class PromptDjMidi extends LitElement {
       this.prompts = newPrompts;
       this.buildUpPrompt.weight = 0;
       this.breakdownPrompt.weight = 0;
-      (this as HTMLElement).dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
+      this.dispatchEvent(new CustomEvent('prompts-changed', { detail: this.allPrompts }));
   }
 
-  private toggleRecording() {
-    (this as HTMLElement).dispatchEvent(new CustomEvent('toggle-recording'));
+  toggleRecording() {
+    this.dispatchEvent(new CustomEvent('toggle-recording'));
   }
 
   render() {
@@ -533,7 +537,7 @@ export class PromptDjMidi extends LitElement {
       </div>`;
   }
 
-  private renderPrompts() {
+  renderPrompts() {
     return [...this.prompts.values()].map((prompt) => {
       return html`<prompt-controller
         promptId=${prompt.promptId}
@@ -550,3 +554,5 @@ export class PromptDjMidi extends LitElement {
     });
   }
 }
+
+customElements.define('prompt-dj-midi', PromptDjMidi);

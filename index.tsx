@@ -17,10 +17,10 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY, apiVersion: 'v1alpha' 
 const model = 'models/lyria-realtime-exp';
 
 function main() {
-  const pdjMidi = new PromptDjMidi();
+  const pdjMidi = new PromptDjMidi() as PromptDjMidi & HTMLElement;
   document.body.appendChild(pdjMidi);
 
-  const infoModal = document.createElement('info-modal') as InfoModal;
+  const infoModal = document.createElement('info-modal') as InfoModal & HTMLElement;
   document.body.appendChild(infoModal);
 
   if (!localStorage.getItem('promptDjMidiVisited')) {
@@ -32,7 +32,7 @@ function main() {
     infoModal.show();
   });
 
-  const toastMessage = new ToastMessage();
+  const toastMessage = new ToastMessage() as ToastMessage & HTMLElement;
   document.body.appendChild(toastMessage);
 
   const liveMusicHelper = new LiveMusicHelper(ai, model);

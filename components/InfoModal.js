@@ -3,14 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { css, html, LitElement } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
 
-@customElement('info-modal')
-// FIX: The class should extend LitElement to be a custom element.
 export class InfoModal extends LitElement {
-  @state() private showing = false;
+  static get properties() {
+    return {
+      showing: { state: true }
+    };
+  }
 
-  static styles = css`
+  static get styles() {
+    return css`
     :host {
       --transition-duration: 0.3s;
     }
@@ -78,15 +80,21 @@ export class InfoModal extends LitElement {
         background-color: #ddd;
     }
   `;
+  }
+
+  constructor() {
+    super();
+    this.showing = false;
+  }
 
   show() {
     this.showing = true;
-    (this as HTMLElement).toggleAttribute('showing', true);
+    this.toggleAttribute('showing', true);
   }
 
   hide() {
     this.showing = false;
-    (this as HTMLElement).toggleAttribute('showing', false);
+    this.toggleAttribute('showing', false);
   }
 
   render() {
@@ -107,8 +115,4 @@ export class InfoModal extends LitElement {
   }
 }
 
-declare global {
-  interface HTMLElementTagNameMap {
-    'info-modal': InfoModal
-  }
-}
+customElements.define('info-modal', InfoModal);

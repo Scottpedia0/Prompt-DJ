@@ -11,16 +11,8 @@
         }
       }
     </script>
-    <script>
-      // Fix "process is not defined" error for browser deployment
-      window.process = {
-        env: {
-          API_KEY: '' // This will be populated by the prompt in index.js
-        }
-      };
-    </script>
   </head>
   <body>
-    <script type="module" src="/index.js"></script>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PlaybackState, Prompt } from './types';
+import type { PlaybackState, Prompt } from './types.ts';
 import { GoogleGenAI, LiveMusicFilteredPrompt } from '@google/genai';
-import { PromptDjMidi } from './components/PromptDjMidi';
-import { ToastMessage } from './components/ToastMessage';
-import { LiveMusicHelper } from './utils/LiveMusicHelper';
-import { AudioAnalyser } from './utils/AudioAnalyser';
-import './components/InfoModal';
-import type { InfoModal } from './components/InfoModal';
+import { PromptDjMidi } from './components/PromptDjMidi.ts';
+import { ToastMessage } from './components/ToastMessage.ts';
+import { LiveMusicHelper } from './utils/LiveMusicHelper.ts';
+import { AudioAnalyser } from './utils/AudioAnalyser.ts';
+import { ChatHelper } from './utils/ChatHelper.ts';
+import './components/InfoModal.ts';
+import type { InfoModal } from './components/InfoModal.ts';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY, apiVersion: 'v1alpha' });
 const model = 'models/lyria-realtime-exp';
@@ -36,7 +37,10 @@ function main() {
   document.body.appendChild(toastMessage);
 
   const liveMusicHelper = new LiveMusicHelper(ai, model);
-  liveMusicHelper.setWeightedPrompts(pdjMidi.allPrompts);
+  // Use audioPrompts to get BPM included
+  liveMusicHelper.setWeightedPrompts(pdjMidi.audioPrompts);
+
+  const chatHelper = new ChatHelper(ai);
 
   const audioAnalyser = new AudioAnalyser(liveMusicHelper.audioContext);
   liveMusicHelper.extraDestination = audioAnalyser.node;
@@ -46,6 +50,12 @@ function main() {
     const prompts = customEvent.detail;
     liveMusicHelper.setWeightedPrompts(prompts);
   }));
+  
+  // Handle config changes (e.g. Temperature)
+  pdjMidi.addEventListener('config-changed', ((e: Event) => {
+      const customEvent = e as CustomEvent<{ temperature: number }>;
+      liveMusicHelper.setConfig({ temperature: customEvent.detail.temperature });
+  }));
 
   pdjMidi.addEventListener('play-pause', () => {
     liveMusicHelper.playPause();
@@ -53,6 +63,46 @@ function main() {
 
   pdjMidi.addEventListener('toggle-recording', () => {
     liveMusicHelper.toggleRecording();
+  });
+  
+  // Handle Hard Reset
+  pdjMidi.addEventListener('reset-audio', () => {
+      liveMusicHelper.stop();
+      toastMessage.show("Audio engine reset.");
+  });
+
+  // Handle Chat Commands
+  pdjMidi.addEventListener('chat-command', async (e: Event) => {
+    const customEvent = e as CustomEvent<{ text: string }>;
+    const text = customEvent.detail.text;
+    
+    // Get visible prompts for context
+    const currentPrompts = Array.from(pdjMidi.allPrompts.values());
+    const currentBpm = pdjMidi.bpmAuto ? 'Auto' : pdjMidi.bpm;
+    
+    // Process via Gemini
+    const actions = await chatHelper.sendCommand(text, currentPrompts, currentBpm);
+    
+    // Perform all actions in a batch to update state consistently
+    pdjMidi.performActions(actions);
+    
+    // Determine toast message
+    let message = '';
+    if (actions.length > 0) {
+        const lastAction = actions[actions.length - 1];
+        if (lastAction.type === 'addPrompt') {
+             message = `AI: Added "${lastAction.data.text}"`;
+        } else if (lastAction.type === 'clearAll') {
+             message = "AI: Cleared all stems";
+        } else {
+             message = `AI: Updated mix based on "${text}"`;
+        }
+    } else {
+        message = `AI: I didn't change anything for "${text}"`;
+    }
+    
+    pdjMidi.setChatProcessing(false);
+    toastMessage.show(message);
   });
 
   liveMusicHelper.addEventListener('recording-state-changed', ((e: Event) => {
@@ -86,7 +136,14 @@ function main() {
     toastMessage.show(error);
   });
 
+  const infoToast = ((e: Event) => {
+    const customEvent = e as CustomEvent<string>;
+    const info = customEvent.detail;
+    toastMessage.show(info);
+  });
+
   liveMusicHelper.addEventListener('error', errorToast);
+  liveMusicHelper.addEventListener('info', infoToast);
   pdjMidi.addEventListener('error', errorToast);
 
   audioAnalyser.addEventListener('audio-level-changed', ((e: Event) => {

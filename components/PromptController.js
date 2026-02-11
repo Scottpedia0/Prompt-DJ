@@ -7,7 +7,6 @@ import { classMap } from 'lit/directives/class-map.js';
 
 import './WeightKnob.js';
 
-/** A single prompt input associated with a MIDI CC. */
 export class PromptController extends LitElement {
   static get properties() {
     return {
@@ -27,75 +26,141 @@ export class PromptController extends LitElement {
 
   static get styles() {
     return css`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
     .prompt {
       width: 100%;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start; /* Align top */
+      gap: 12px;
+      position: relative;
+      background: rgba(18, 18, 24, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px 8px;
+      box-sizing: border-box;
+      transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+      backdrop-filter: blur(4px);
     }
+
+    /* Active State */
+    .prompt.active {
+      background: rgba(22, 22, 28, 0.9);
+      border-color: var(--accent-color, #fff);
+      box-shadow: 0 0 15px var(--accent-glow, rgba(255,255,255,0.1));
+    }
+
     weight-knob {
-      width: 70%;
-      flex-shrink: 0;
+      /* Fixed size handled in component, allow it to just sit here */
+      margin-top: 8px;
     }
-    #midi {
-      font-family: monospace;
-      text-align: center;
-      font-size: 1.5vmin;
-      border: 0.2vmin solid #fff;
-      border-radius: 0.5vmin;
-      padding: 2px 5px;
-      color: #fff;
-      background: #0006;
+    
+    .midi-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #555;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 3px 6px;
+      border-radius: 4px;
       cursor: pointer;
-      visibility: hidden;
       user-select: none;
-      margin-top: 0.75vmin;
-      .learn-mode & {
-        color: orange;
-        border-color: orange;
-      }
-      .show-cc & {
-        visibility: visible;
-      }
+      transition: all 0.2s;
+      text-transform: uppercase;
     }
+    
+    .midi-badge:hover {
+        color: #ddd;
+    }
+
+    .learn-mode .midi-badge {
+      color: #ff9800;
+      background: rgba(255, 152, 0, 0.15);
+      box-shadow: 0 0 8px rgba(255, 152, 0, 0.3);
+      animation: pulse 1s infinite;
+    }
+    
+    .prompt.active .midi-badge {
+        color: var(--accent-color);
+        background: var(--accent-glow);
+    }
+
+    @keyframes pulse { 50% { opacity: 0.5; } }
+
     #text {
+      font-family: 'Google Sans', 'Inter', sans-serif;
       font-weight: 500;
-      font-size: 1.8vmin;
-      max-width: 17vmin;
-      min-width: 2vmin;
-      padding: 0.1em 0.3em;
-      margin-top: 0.5vmin;
-      flex-shrink: 0;
-      border-radius: 0.25vmin;
+      font-size: 13px;
+      line-height: 1.4;
+      width: 90%;
+      padding: 4px;
       text-align: center;
-      white-space: pre;
-      overflow: hidden;
-      border: none;
       outline: none;
-      -webkit-font-smoothing: antialiased;
+      color: #999;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      
+      /* Make sure it sits nicely below knob */
+      max-height: 3em; 
+      overflow: hidden;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    
+    .prompt.active #text {
+        color: #fff;
+        text-shadow: 0 0 8px rgba(0,0,0,0.6);
+        font-weight: 600;
+    }
+
+    #text:hover {
+      color: #ccc;
+      background: rgba(255,255,255,0.05);
+    }
+
+    #text:focus {
       background: #000;
       color: #fff;
-      &:not(:focus) {
-        text-overflow: ellipsis;
-      }
+      border-color: #444;
+      position: absolute;
+      bottom: 8px;
+      left: 5%;
+      width: 90%;
+      z-index: 20;
+      max-height: none;
+      -webkit-line-clamp: unset;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.8);
     }
+    
+    #text:empty::before {
+      content: 'Empty Slot';
+      color: #333;
+      font-style: italic;
+      font-weight: 400;
+    }
+
     :host([filtered]) {
-      weight-knob { 
-        opacity: 0.5;
-      }
-      #text {
-        background: #da2000;
-        z-index: 1;
-      }
+      opacity: 0.5;
+      filter: grayscale(100%);
     }
-    @media only screen and (max-width: 600px) {
-      #text {
-        font-size: 2.3vmin;
-      }
-      weight-knob {
-        width: 60%;
-      }
+    :host([filtered]) #text {
+        text-decoration: line-through;
+        color: #ff4136;
     }
   `;
   }
@@ -105,7 +170,7 @@ export class PromptController extends LitElement {
     this.promptId = '';
     this.text = '';
     this.weight = 0;
-    this.color = '';
+    this.color = '#ffffff';
     this.filtered = false;
     this.cc = 0;
     this.channel = 0;
@@ -140,7 +205,6 @@ export class PromptController extends LitElement {
   }
 
   firstUpdated() {
-    // contenteditable is applied to textInput so we can "shrink-wrap" to text width
     this.textInput.setAttribute('contenteditable', 'plaintext-only');
     this.textInput.textContent = this.text;
     this.lastValidText = this.text;
@@ -151,7 +215,9 @@ export class PromptController extends LitElement {
       this.learnMode = false;
     }
     if (changedProperties.has('text') && this.textInput) {
-      this.textInput.textContent = this.text;
+      if (document.activeElement !== this.textInput) {
+          this.textInput.textContent = this.text;
+      }
     }
     super.update(changedProperties);
   }
@@ -190,7 +256,8 @@ export class PromptController extends LitElement {
   async updateText() {
     const newText = this.textInput.textContent?.trim();
     if (!newText) {
-      this.resetText();
+      this.text = '';
+      this.lastValidText = '';
     } else {
       this.text = newText;
       this.lastValidText = newText;
@@ -218,27 +285,36 @@ export class PromptController extends LitElement {
   }
 
   render() {
+    const isActive = this.weight > 0;
     const classes = classMap({
       'prompt': true,
+      'active': isActive,
       'learn-mode': this.learnMode,
-      'show-cc': this.showCC,
     });
-    return html`<div class=${classes}>
+    
+    const styles = `
+        --accent-color: ${this.color};
+        --accent-glow: ${this.color}40;
+    `;
+
+    return html`<div class=${classes} style=${styles}>
+      <div class="midi-badge" @click=${this.toggleLearnMode}>
+        ${this.learnMode ? 'Lrn' : `CC ${this.cc}`}
+      </div>
+      
       <weight-knob
         id="weight"
         value=${this.weight}
         color=${this.filtered ? '#888' : this.color}
-        audioLevel=${this.filtered ? 0 : this.audioLevel}
+        audioLevel=${this.filtered || !isActive ? 0 : this.audioLevel}
         @input=${this.updateWeight}></weight-knob>
+        
       <span
         id="text"
         spellcheck="false"
         @focus=${this.onFocus}
         @keydown=${this.onKeyDown}
         @blur=${this.updateText}></span>
-      <div id="midi" @click=${this.toggleLearnMode}>
-        ${this.learnMode ? 'Learn' : `CC:${this.cc}`}
-      </div>
     </div>`;
   }
 }

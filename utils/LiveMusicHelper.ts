@@ -2,10 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import type { PlaybackState, Prompt } from '../types';
+import type { PlaybackState, Prompt } from '../types.ts';
 import { type AudioChunk, GoogleGenAI, type LiveMusicFilteredPrompt, type LiveMusicServerMessage, type LiveMusicSession, LiveMusicGenerationConfig } from '@google/genai';
-import { decode, decodeAudioData } from './audio';
-import { throttle } from './throttle';
+import { decode, decodeAudioData } from './audio.ts';
+import { throttle } from './throttle.ts';
 
 export type RecordingState = { isRecording: boolean, isProcessing: boolean };
 
@@ -18,6 +18,7 @@ export class LiveMusicHelper extends EventTarget {
   private sessionPromise: Promise<LiveMusicSession> | null = null;
 
   private connectionError = true;
+  private intentionalStop = false;
 
   private filteredPrompts = new Set<string>();
   private nextStartTime = 0;
@@ -35,6 +36,7 @@ export class LiveMusicHelper extends EventTarget {
   private mediaStreamDestination: MediaStreamAudioDestinationNode;
 
   private prompts: Map<string, Prompt>;
+  private currentConfig: LiveMusicGenerationConfig = { temperature: 1.0 };
 
   constructor(ai: GoogleGenAI, model: string) {
     super();
@@ -44,6 +46,17 @@ export class LiveMusicHelper extends EventTarget {
     this.audioContext = new AudioContext({ sampleRate: 48000 });
     this.outputNode = this.audioContext.createGain();
     this.mediaStreamDestination = this.audioContext.createMediaStreamDestination();
+  }
+
+  public async setConfig(config: LiveMusicGenerationConfig) {
+      this.currentConfig = config;
+      if (this.session) {
+          try {
+              await this.session.setMusicGenerationConfig({ config: this.currentConfig });
+          } catch (e: any) {
+              console.warn('Failed to update music config', e);
+          }
+      }
   }
 
   private getSession(): Promise<LiveMusicSession> {
@@ -73,9 +86,20 @@ export class LiveMusicHelper extends EventTarget {
           this.dispatchEvent(new CustomEvent('error', { detail: 'Connection error, please restart audio.' }));
         },
         onclose: () => {
-          this.connectionError = true;
-          this.stop();
-          this.dispatchEvent(new CustomEvent('error', { detail: 'Connection error, please restart audio.' }));
+          if (!this.intentionalStop) {
+            // Unexpected close (timeout or error), attempt reconnect
+            this.dispatchEvent(new CustomEvent('info', { detail: 'Session refreshed.' }));
+            this.session = null;
+            this.sessionPromise = null;
+            this.nextStartTime = 0;
+            this.play();
+          } else {
+            // User initiated close or valid stop
+            this.connectionError = true;
+            this.session = null;
+            this.sessionPromise = null;
+            // State is already handled by stop()
+          }
         },
       },
     });
@@ -147,12 +171,12 @@ export class LiveMusicHelper extends EventTarget {
   }, 200);
 
   public async play() {
+    this.intentionalStop = false;
     this.setPlaybackState('loading');
     this.session = await this.getSession();
     
-    // Set config according to official docs
-    const config: LiveMusicGenerationConfig = { bpm: 90, temperature: 1.0 };
-    await this.session.setMusicGenerationConfig({ config });
+    // Use the current stored config
+    await this.session.setMusicGenerationConfig({ config: this.currentConfig });
 
     await this.setWeightedPrompts(this.prompts);
     this.audioContext.resume();
@@ -165,6 +189,7 @@ export class LiveMusicHelper extends EventTarget {
   }
 
   public pause() {
+    this.intentionalStop = true;
     if (this.isRecording) {
       this.toggleRecording();
     }
@@ -176,6 +201,7 @@ export class LiveMusicHelper extends EventTarget {
   }
 
   public stop() {
+    this.intentionalStop = true;
     if (this.isRecording) {
       this.toggleRecording();
     }

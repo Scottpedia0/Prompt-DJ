@@ -3,22 +3,29 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 /**
- * Throttles a callback to be called at most once per `delay` milliseconds.
- * Also returns the result of the last "fresh" call...
+ * Throttles a callback. Ensures the first call runs immediately, 
+ * and the LAST call in a burst runs after the delay (trailing edge).
  */
-export function throttle<T extends (...args: Parameters<T>) => ReturnType<T>>(
+export function throttle<T extends (...args: any[]) => void>(
   func: T,
-  delay: number,
-): (...args: Parameters<T>) => ReturnType<T> {
-  let lastCall = -Infinity;
-  let lastResult: ReturnType<T>;
-  return (...args: Parameters<T>) => {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastCall;
-    if (timeSinceLastCall >= delay) {
-      lastResult = func(...args);
-      lastCall = now;
+  limit: number
+): (...args: Parameters<T>) => void {
+  let lastFunc: ReturnType<typeof setTimeout>;
+  let lastRan: number;
+  
+  return function(this: any, ...args: Parameters<T>) {
+    const context = this;
+    if (!lastRan) {
+      func.apply(context, args);
+      lastRan = Date.now();
+    } else {
+      clearTimeout(lastFunc);
+      lastFunc = setTimeout(function() {
+        if ((Date.now() - lastRan) >= limit) {
+          func.apply(context, args);
+          lastRan = Date.now();
+        }
+      }, limit - (Date.now() - lastRan));
     }
-    return lastResult;
   };
 }

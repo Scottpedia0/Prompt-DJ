@@ -14,6 +14,7 @@ export class LiveMusicHelper extends EventTarget {
     this.session = null;
     this.sessionPromise = null;
     this.connectionError = true;
+    this.intentionalStop = false;
     this.filteredPrompts = new Set();
     this.nextStartTime = 0;
     this.bufferTime = 2;
@@ -25,6 +26,7 @@ export class LiveMusicHelper extends EventTarget {
     this.mediaStreamDestination = null;
     this.prompts = new Map();
     this.extraDestination = null;
+    this.currentConfig = { temperature: 1.0 };
 
     this.audioContext = new AudioContext({ sampleRate: 48000 });
     this.outputNode = this.audioContext.createGain();
@@ -55,6 +57,17 @@ export class LiveMusicHelper extends EventTarget {
     }, 200);
   }
 
+  async setConfig(config) {
+      this.currentConfig = config;
+      if (this.session) {
+          try {
+              await this.session.setMusicGenerationConfig({ config: this.currentConfig });
+          } catch (e) {
+              console.warn('Failed to update music config', e);
+          }
+      }
+  }
+
   getSession() {
     if (!this.sessionPromise) this.sessionPromise = this.connect();
     return this.sessionPromise;
@@ -82,9 +95,19 @@ export class LiveMusicHelper extends EventTarget {
           this.dispatchEvent(new CustomEvent('error', { detail: 'Connection error, please restart audio.' }));
         },
         onclose: () => {
-          this.connectionError = true;
-          this.stop();
-          this.dispatchEvent(new CustomEvent('error', { detail: 'Connection error, please restart audio.' }));
+          if (!this.intentionalStop) {
+            // Unexpected close (timeout or error), attempt reconnect
+            this.dispatchEvent(new CustomEvent('info', { detail: 'Session refreshed.' }));
+            this.session = null;
+            this.sessionPromise = null;
+            this.nextStartTime = 0;
+            this.play();
+          } else {
+            // User initiated close
+            this.connectionError = true;
+            this.session = null;
+            this.sessionPromise = null;
+          }
         },
       },
     });
@@ -130,12 +153,11 @@ export class LiveMusicHelper extends EventTarget {
   }
 
   async play() {
+    this.intentionalStop = false;
     this.setPlaybackState('loading');
     this.session = await this.getSession();
     
-    // Set config according to official docs
-    const config = { bpm: 90, temperature: 1.0 };
-    await this.session.setMusicGenerationConfig({ config });
+    await this.session.setMusicGenerationConfig({ config: this.currentConfig });
 
     await this.setWeightedPrompts(this.prompts);
     this.audioContext.resume();
@@ -148,6 +170,7 @@ export class LiveMusicHelper extends EventTarget {
   }
 
   pause() {
+    this.intentionalStop = true;
     if (this.isRecording) {
       this.toggleRecording();
     }
@@ -159,6 +182,7 @@ export class LiveMusicHelper extends EventTarget {
   }
 
   stop() {
+    this.intentionalStop = true;
     if (this.isRecording) {
       this.toggleRecording();
     }

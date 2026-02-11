@@ -4,10 +4,9 @@
 */
 import { svg, css, html, LitElement } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { PlaybackState } from '../types';
+import type { PlaybackState } from '../types.ts';
 
 @customElement('play-pause-button')
-// FIX: The class should extend LitElement to be a custom element.
 export class PlayPauseButton extends LitElement {
 
   @property({ type: String }) playbackState: PlaybackState = 'stopped';

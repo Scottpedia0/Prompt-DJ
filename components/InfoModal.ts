@@ -6,7 +6,6 @@ import { css, html, LitElement } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 
 @customElement('info-modal')
-// FIX: The class should extend LitElement to be a custom element.
 export class InfoModal extends LitElement {
   @state() private showing = false;
 
@@ -81,12 +80,12 @@ export class InfoModal extends LitElement {
 
   show() {
     this.showing = true;
-    (this as HTMLElement).toggleAttribute('showing', true);
+    (this as unknown as HTMLElement).toggleAttribute('showing', true);
   }
 
   hide() {
     this.showing = false;
-    (this as HTMLElement).toggleAttribute('showing', false);
+    (this as unknown as HTMLElement).toggleAttribute('showing', false);
   }
 
   render() {

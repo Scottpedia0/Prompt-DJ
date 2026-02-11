@@ -7,7 +7,6 @@ import { customElement, property } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
 @customElement('toast-message')
-// FIX: The class should extend LitElement to be a custom element.
 export class ToastMessage extends LitElement {
   static styles = css`
     .toast {
